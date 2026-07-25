@@ -207,13 +207,6 @@
     .management-class:last-child { border-bottom: 0; }
     .management-class strong { display: block; }
     .management-class small { color: var(--muted); }
-    .color-odds { margin: 0 0 16px; padding: 0 0 16px; border-bottom: 2px dashed #a98d58; }
-    .color-odds h3 { margin: 0 0 5px; color: var(--ink); font-size: 17px; }
-    .color-odds-copy { margin: 0 0 11px; color: var(--muted); font-size: 12px; font-weight: 800; line-height: 1.35; }
-    .color-swatch { display: inline-block; width: 11px; height: 11px; margin-right: 5px; border: 2px solid var(--ink); border-radius: 50%; background: var(--swatch); vertical-align: -1px; }
-    .color-odds-status { display: flex; justify-content: space-between; gap: 10px; margin: 11px 0 0; color: var(--muted); font-size: 12px; font-weight: 800; }
-    .color-odds-status strong { color: var(--ink); }
-    .color-odds-status .is-invalid { color: #c33655; }
     .student-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 7px 0 11px; }
     .student-chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 6px 5px 8px; border-radius: 99px; color: #714462; background: #fae8f0; font-size: 12px; font-weight: 700; }
     .student-chip button { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; color: #fff; background: #bd5f87; font-size: 14px; line-height: 15px; }
@@ -685,9 +678,6 @@
     .turn-result-count { display: grid; place-items: center; min-width: 150px; min-height: 132px; padding: 12px 18px; border: 5px solid var(--ink); border-radius: 24px; color: #e84b83; background: #fffdf3; box-shadow: inset 0 0 0 5px #ffe68c, 4px 5px 0 var(--ink), 9px 10px 0 #f26fa4; font-family: "Arial Rounded MT Bold", "Comic Sans MS", sans-serif; font-size: 82px; font-weight: 1000; line-height: .8; text-shadow: 2px 2px 0 #ffcc4d; }
     .turn-result-word { color: var(--ink); font-family: "Comic Sans MS", "Trebuchet MS", sans-serif; font-size: 29px; font-weight: 1000; text-shadow: 1px 1px 0 #fffdf3; }
     .turn-result-copy { margin: 6px 0 0; color: var(--ink); font-size: 17px; font-weight: 850; line-height: 1.4; }
-    .turn-card-colors { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; max-width: 470px; margin-top: 4px; }
-    .turn-color-card { padding: 7px 10px; border: 3px solid var(--ink); border-radius: 9px; color: #000; background: var(--card-color); box-shadow: 2px 3px 0 var(--ink); font-family: "Courier New", monospace; font-size: 12px; font-weight: 1000; letter-spacing: .05em; text-shadow: 1px 1px 0 rgba(255,253,243,.55); text-transform: uppercase; }
-    .turn-color-empty { color: var(--muted); font-size: 13px; font-weight: 800; }
     @media (max-width: 560px) { .turn-launcher { align-items: stretch; flex-direction: column; } .class-launcher-actions { display: grid; grid-template-columns: 1fr 1fr; } .classes-footer { align-items: stretch; flex-direction: column; } .classes-footer .save-note { margin-left: 0; } .turn-wizard-head, .turn-wizard-body { padding-left: 16px; padding-right: 16px; } .wizard-athletes { grid-template-columns: 1fr; } .turn-wizard-actions { flex-direction: column-reverse; } .turn-number-input { font-size: 33px; } }
     @media (max-height: 760px) {
       .turn-wizard { max-height: calc(100dvh - 8px); }
@@ -784,7 +774,7 @@
         <div class="pin-pad wizard-pin-pad" aria-label="Circle number keypad"><button class="pin-key" type="button" data-turn-pad="1">1</button><button class="pin-key" type="button" data-turn-pad="2">2</button><button class="pin-key" type="button" data-turn-pad="3">3</button><button class="pin-key" type="button" data-turn-pad="4">4</button><button class="pin-key" type="button" data-turn-pad="5">5</button><button class="pin-key" type="button" data-turn-pad="6">6</button><button class="pin-key" type="button" data-turn-pad="7">7</button><button class="pin-key" type="button" data-turn-pad="8">8</button><button class="pin-key" type="button" data-turn-pad="9">9</button><button class="pin-key" type="button" data-turn-pad="clear">C</button><button class="pin-key" type="button" data-turn-pad="0">0</button><button class="pin-key" type="button" data-turn-pad="back" aria-label="Backspace">⌫</button><button class="pin-key wizard-decimal-key" type="button" data-turn-pad="." aria-label="Decimal point">.</button></div>
         <div class="turn-wizard-actions"><button class="button light" id="changeTurnAthleteButton" type="button">Change kid</button><button class="button pink" id="showCardsButton" type="submit" disabled>Show cards</button></div>
       </form>
-      <section class="turn-screen" id="turnResultScreen" aria-live="polite" hidden><div class="turn-result"><span class="turn-result-kicker" id="turnResultKicker">Card result</span><output class="turn-result-count" id="turnResultCount">0</output><span class="turn-result-word" id="turnResultWord">cards</span><p class="turn-result-copy" id="turnResultSummary"></p><div class="turn-card-colors" id="turnResultCards"></div></div><div class="turn-wizard-actions"><button class="button light" id="editTurnAmountButton" type="button">Edit circles</button><button class="button pink" id="nextKidButton" type="button">Next kid</button></div></section>
+      <section class="turn-screen" id="turnResultScreen" aria-live="polite" hidden><div class="turn-result"><span class="turn-result-kicker" id="turnResultKicker">Card result</span><output class="turn-result-count" id="turnResultCount">0</output><span class="turn-result-word" id="turnResultWord">cards</span><p class="turn-result-copy" id="turnResultSummary"></p></div><div class="turn-wizard-actions"><button class="button light" id="editTurnAmountButton" type="button">Edit circles</button><button class="button pink" id="nextKidButton" type="button">Next kid</button></div></section>
     </div>
   </dialog>
 
@@ -868,18 +858,6 @@
       const STORAGE_KEY = 'candy-circle-quest-v1';
       const SOUND_KEY = 'candy-circle-quest-sound-enabled';
       const COLORS = ['#e94c46', '#72bde8', '#6cc992', '#8d65c7', '#f56ea6', '#ffb54e'];
-      const CARD_COLORS = [
-        { id: 'red', name: 'Red', hex: '#e94c46' },
-        { id: 'blue', name: 'Blue', hex: '#72bde8' },
-        { id: 'green', name: 'Green', hex: '#6cc992' },
-        { id: 'purple', name: 'Purple', hex: '#8d65c7' },
-        { id: 'pink', name: 'Pink', hex: '#f56ea6' },
-        { id: 'orange', name: 'Orange', hex: '#ffb54e' }
-      ];
-      const DEFAULT_COLOR_PERCENTAGES = { red: 17, blue: 17, green: 17, purple: 17, pink: 16, orange: 16 };
-      const LEVEL3_COLOR_PERCENTAGES = { red: 20, blue: 20, green: 20, purple: 20, pink: 0, orange: 20 };
-      const defaultColorPercentages = () => ({ ...DEFAULT_COLOR_PERCENTAGES });
-      const level3ColorPercentages = () => ({ ...LEVEL3_COLOR_PERCENTAGES });
 
       const id = (prefix = 'id') => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
       const shortName = (name) => name.split(/\s+/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || '?';
@@ -900,13 +878,13 @@
         formBonus: options.formBonus ?? false, notes: options.notes || '', earnedCards: 0, circleProgress: 0, circleCardsEarned: 0
       });
       const createSeedState = () => ({
-        version: 2,
+        version: 1,
         selectedClassId: 'level-3-boys',
         noticeHidden: false,
         history: [],
         classes: [
           {
-            id: 'level-3-boys', name: 'Level 3 Boys', label: 'L3', rulesKind: 'level3', colorPercentages: level3ColorPercentages(),
+            id: 'level-3-boys', name: 'Level 3 Boys', label: 'L3', rulesKind: 'level3',
             rules: [
               'Circle work is the card work for this class.',
               'Use each gymnast’s personal starting circle goal. After the first card, use the repeat goal shown in the lookup table.',
@@ -922,7 +900,7 @@
             ]
           },
           {
-            id: 'boys-level-4', name: 'Boys Level 4', label: 'L4', rulesKind: 'level4', colorPercentages: defaultColorPercentages(),
+            id: 'boys-level-4', name: 'Boys Level 4', label: 'L4', rulesKind: 'level4',
             rules: [
               'They must start and finish with a circle.',
               'Circle work earns cards using each gymnast’s individual circle goal.',
@@ -940,7 +918,7 @@
             ]
           },
           {
-            id: 'boys-nga', name: 'Boys NGA', label: 'NGA', rulesKind: 'circle', colorPercentages: defaultColorPercentages(),
+            id: 'boys-nga', name: 'Boys NGA', label: 'NGA', rulesKind: 'circle',
             rules: [
               'This class is loaded from the current roster with a starter circle-only rule.',
               'Before playing, set each athlete’s personal circle goal in the lookup table. The default is 1 circle = 1 card.',
@@ -958,7 +936,7 @@
             ]
           },
           {
-            id: 'advanced-boys', name: 'Advanced Boys', label: 'ADV', rulesKind: 'circle', colorPercentages: defaultColorPercentages(),
+            id: 'advanced-boys', name: 'Advanced Boys', label: 'ADV', rulesKind: 'circle',
             rules: [
               'This class is loaded from the current roster with a starter circle-only rule.',
               'Before playing, set each athlete’s personal circle goal in the lookup table. The default is 1 circle = 1 card.',
@@ -1030,25 +1008,9 @@
         } catch (error) { console.warn('Could not read saved Candy Circle Quest data.', error); }
         return createSeedState();
       }
-      function defaultColorPercentagesFor(group) { return group?.id === 'level-3-boys' ? level3ColorPercentages() : defaultColorPercentages(); }
-      function normalizeColorPercentages(candidate, group) {
-        if (!candidate || typeof candidate !== 'object') return defaultColorPercentagesFor(group);
-        const percentages = {};
-        let total = 0;
-        for (const color of CARD_COLORS) {
-          const value = Number(candidate[color.id]);
-          if (!Number.isFinite(value) || value < 0 || value > 100) return defaultColorPercentagesFor(group);
-          percentages[color.id] = value;
-          total += value;
-        }
-        return Math.abs(total - 100) < .01 ? percentages : defaultColorPercentagesFor(group);
-      }
-      function colorPercentagesFor(group) { return normalizeColorPercentages(group?.colorPercentages, group); }
       function normalizeState(candidate) {
-        candidate.version = 2;
         candidate.history = Array.isArray(candidate.history) ? candidate.history : [];
         candidate.classes.forEach((group) => {
-          group.colorPercentages = normalizeColorPercentages(group.colorPercentages, group);
           group.athletes = Array.isArray(group.athletes) ? group.athletes : [];
           group.athletes.forEach((athlete) => {
             athlete.circleGoal = Math.max(.125, cleanNumber(athlete.circleGoal, athlete.firstGoal || 1));
@@ -1104,19 +1066,6 @@
         const increment = currentIncrementGoal(athlete);
         const cards = work + 0.000001 < base ? 0 : 1 + Math.floor((work - base + 0.000001) / increment);
         return { cards, work, base, increment };
-      }
-      function drawCardColorCounts(group, count) {
-        const percentages = colorPercentagesFor(group);
-        const total = CARD_COLORS.reduce((sum, color) => sum + percentages[color.id], 0);
-        const counts = Object.fromEntries(CARD_COLORS.map((color) => [color.id, 0]));
-        for (let index = 0; index < Math.max(0, Math.floor(count)); index += 1) {
-          let draw = Math.random() * total;
-          for (const color of CARD_COLORS) {
-            draw -= percentages[color.id];
-            if (draw < 0) { counts[color.id] += 1; break; }
-          }
-        }
-        return CARD_COLORS.filter((color) => counts[color.id]).map((color) => ({ ...color, count: counts[color.id] }));
       }
       function safeText(value) { return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char])); }
 
@@ -1366,9 +1315,6 @@
           el('#turnResultCount').textContent = lastTurn.cards;
           el('#turnResultWord').textContent = lastTurn.cards === 1 ? 'card' : 'cards';
           el('#turnResultSummary').textContent = `${lastTurn.name} did ${formatCircles(lastTurn.work)}.`;
-          el('#turnResultCards').innerHTML = lastTurn.cardColorCounts.length
-            ? lastTurn.cardColorCounts.map((color) => `<span class="turn-color-card" style="--card-color:${color.hex}">${color.name} × ${color.count}</span>`).join('')
-            : '<span class="turn-color-empty">No card colors to draw this turn.</span>';
         }
       }
       function openTurnWizard() {
@@ -1420,9 +1366,8 @@
         const amount = turnAmountValue();
         if (!athlete || amount === null) { updateTurnAmount(); return; }
         const result = calculateCards(athlete, amount);
-        const group = currentClass();
-        lastTurn = { name: athlete.name, work: result.work, cards: result.cards, cardColorCounts: drawCardColorCounts(group, result.cards) };
-        recordTurn(group, athlete, result);
+        lastTurn = { name: athlete.name, work: result.work, cards: result.cards };
+        recordTurn(currentClass(), athlete, result);
         setTurnStep('result');
       }
       function closeTurnWizard() { el('#turnFlowDialog').close(); }
@@ -1457,7 +1402,7 @@
         event.preventDefault();
         const name = el('#newClassName').value.trim();
         if (!name) return;
-        const group = { id: id('class'), name, label: el('#newClassCode').value.trim() || name.slice(0, 10), rulesKind: 'circle', rules: [], colorPercentages: defaultColorPercentages(), athletes: [] };
+        const group = { id: id('class'), name, label: el('#newClassCode').value.trim() || name.slice(0, 10), rulesKind: 'circle', rules: [], athletes: [] };
         state.classes.push(group);
         state.selectedClassId = group.id;
         resetTurn();
@@ -1474,51 +1419,10 @@
           return;
         }
         el('#manageDialogTitle').textContent = group.name;
-        const colorPercentages = colorPercentagesFor(group);
-        const colorFields = CARD_COLORS.map((color) => `<label class="field"><span><i class="color-swatch" style="--swatch:${color.hex}" aria-hidden="true"></i>${color.name}</span><input type="number" min="0" max="100" step="0.1" inputmode="decimal" data-color-percentage="${color.id}" value="${colorPercentages[color.id]}"></label>`).join('');
         const studentRows = group.athletes.length
           ? group.athletes.map((athlete) => `<div class="management-class"><div><strong>${safeText(athlete.name)}</strong><small>First card: ${formatCircles(currentCircleGoal(athlete))} · Extra cards: +${formatCircles(currentIncrementGoal(athlete))}</small></div><div><button class="button light small" type="button" data-edit-athlete="${athlete.id}">Edit</button></div></div>`).join('')
           : '<p class="tiny-note">No students yet. Add one to set their card goals.</p>';
-        el('#manageContent').innerHTML = `<section class="color-odds"><h3>Card color chances</h3><p class="color-odds-copy">Set the chance for each color when cards are shown. All six values must total 100%.</p><div class="form-grid">${colorFields}</div><p class="color-odds-status"><strong id="colorPercentageTotal">Total: 100%</strong><span id="colorPercentageMessage">Ready to save.</span></p><div class="modal-actions"><button class="button pink small" type="button" data-save-color-percentages>Save color chances</button></div></section><div class="modal-actions"><button class="button pink small" type="button" data-add-athlete>Add student</button></div>${studentRows}`;
-        updateColorPercentageTotal();
-      }
-      function colorPercentagesFromInputs() {
-        const percentages = {};
-        let valid = true;
-        els('[data-color-percentage]').forEach((input) => {
-          const raw = input.value.trim();
-          const value = Number(raw);
-          if (!raw || !Number.isFinite(value) || value < 0 || value > 100) valid = false;
-          percentages[input.dataset.colorPercentage] = value;
-        });
-        const total = CARD_COLORS.reduce((sum, color) => sum + (percentages[color.id] || 0), 0);
-        return { percentages, total, valid };
-      }
-      function formatPercentage(value) { return String(Math.round(value * 100) / 100); }
-      function updateColorPercentageTotal() {
-        const totalNode = el('#colorPercentageTotal');
-        const messageNode = el('#colorPercentageMessage');
-        const saveButton = el('[data-save-color-percentages]');
-        if (!totalNode || !messageNode || !saveButton) return;
-        const { total, valid } = colorPercentagesFromInputs();
-        const totalIsValid = valid && Math.abs(total - 100) < .01;
-        totalNode.textContent = `Total: ${formatPercentage(total)}%`;
-        messageNode.textContent = totalIsValid ? 'Ready to save.' : 'Set all six values to exactly 100%.';
-        messageNode.classList.toggle('is-invalid', !totalIsValid);
-        saveButton.disabled = !totalIsValid;
-      }
-      function saveColorPercentages() {
-        const group = state.classes.find((item) => item.id === settingsClassId);
-        const { percentages, total, valid } = colorPercentagesFromInputs();
-        if (!group || !valid || Math.abs(total - 100) >= .01) {
-          updateColorPercentageTotal();
-          toast('Set all six color chances to exactly 100%.');
-          playSound('error');
-          return;
-        }
-        group.colorPercentages = percentages;
-        saveState('Card color chances saved.');
-        renderManageDialog();
+        el('#manageContent').innerHTML = `<div class="modal-actions"><button class="button pink small" type="button" data-add-athlete>Add student</button></div>${studentRows}`;
       }
       function openSettingsAthlete(athleteId = '') {
         el('#manageDialog').close();
@@ -1596,9 +1500,6 @@
       el('#nextKidButton').addEventListener('click', resetTurn);
       el('#classForm').addEventListener('submit', createClass);
       el('#athleteForm').addEventListener('submit', saveAthlete);
-      document.addEventListener('input', (event) => {
-        if (event.target.matches('[data-color-percentage]')) updateColorPercentageTotal();
-      });
       document.addEventListener('click', (event) => {
         const button = event.target.closest('button');
         if (button && !button.disabled && button.id !== 'soundToggleButton') {
@@ -1611,8 +1512,6 @@
         }
         const close = event.target.closest('[data-close]');
         if (close) { el(`#${close.dataset.close}`).close(); return; }
-        const saveColorPercentagesButton = event.target.closest('[data-save-color-percentages]');
-        if (saveColorPercentagesButton) { saveColorPercentages(); return; }
         const editClass = event.target.closest('[data-edit-class]');
         if (editClass) { openClassSettings(editClass.dataset.editClass); return; }
         const playClassButton = event.target.closest('[data-play-class]');
