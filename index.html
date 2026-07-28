@@ -732,6 +732,7 @@
   <!-- Gymnastics Vault icon -->
   <link rel="icon" type="image/png" href="icon.png">
   <link rel="apple-touch-icon" sizes="180x180" href="icon.png">
+  <link rel="stylesheet" href="candyland-sync.css">
   <meta name="theme-color" content="#0b4f32">
 </head>
 <body>
@@ -739,7 +740,7 @@
     <header>
       <div class="lollipop" aria-hidden="true"></div>
       <div>
-        <p class="eyebrow">Coach-ready • local-only</p>
+        <p class="eyebrow">Coach-ready • local first</p>
         <h1>Candy Card Calculator</h1>
         <p class="subtitle">Tap in circles. Tap a name. Hand them their cards.</p>
       </div>
@@ -758,7 +759,7 @@
       </article>
       <div class="classes-footer">
         <button class="button light small" id="addClassButton" type="button">+ Class</button>
-        <span class="save-note" id="saveNote">Goals save on this device</span>
+        <span class="save-note" id="saveNote">Goals save on this device first</span>
       </div>
     </section>
   </main>
@@ -838,6 +839,7 @@
 
   <div class="toast" id="toast" role="status"></div>
 
+  <script src="candyland-storage.js"></script>
   <script>
     (() => {
       'use strict';
@@ -855,8 +857,7 @@
       document.addEventListener('keydown', (event) => {
         if ((event.ctrlKey || event.metaKey) && ['+', '-', '=', '0'].includes(event.key)) event.preventDefault();
       });
-      const STORAGE_KEY = 'candy-circle-quest-v1';
-      const SOUND_KEY = 'candy-circle-quest-sound-enabled';
+      const storage = window.CandylandStorage;
       const COLORS = ['#e94c46', '#72bde8', '#6cc992', '#8d65c7', '#f56ea6', '#ffb54e'];
 
       const id = (prefix = 'id') => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -952,15 +953,18 @@
 
       const el = (selector) => document.querySelector(selector);
       const els = (selector) => [...document.querySelectorAll(selector)];
-      let state = loadState();
+      const defaultState = createSeedState();
+      let state = storage.loadState(defaultState);
       let toastTimer;
-      let soundEnabled = localStorage.getItem(SOUND_KEY) !== 'off';
+      let soundEnabled = storage.loadSound(true);
       let audioContext;
       let selectedTurnAthleteId = '';
       let lastTurn = null;
       let turnStep = 'pick';
       let settingsClassId = '';
       let reportPeriod = 'daily';
+      const markStateEditorActive = () =>
+        storage.setEditorState('state', { active: true });
 
       function updateSoundToggle() {
         const button = el('#soundToggleButton');
@@ -996,33 +1000,31 @@
       function toggleSounds() {
         const wasEnabled = soundEnabled;
         soundEnabled = !soundEnabled;
-        localStorage.setItem(SOUND_KEY, soundEnabled ? 'on' : 'off');
         updateSoundToggle();
         if (!wasEnabled) playSound('chime');
+        storage.saveSound(soundEnabled).catch((error) => {
+          soundEnabled = wasEnabled;
+          updateSoundToggle();
+          showStorageError(error);
+        });
       }
 
-      function loadState() {
-        try {
-          const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
-          if (parsed && Array.isArray(parsed.classes) && parsed.classes.length) return normalizeState(parsed);
-        } catch (error) { console.warn('Could not read saved Candy Circle Quest data.', error); }
-        return createSeedState();
-      }
-      function normalizeState(candidate) {
-        candidate.history = Array.isArray(candidate.history) ? candidate.history : [];
-        candidate.classes.forEach((group) => {
-          group.athletes = Array.isArray(group.athletes) ? group.athletes : [];
-          group.athletes.forEach((athlete) => {
-            athlete.circleGoal = Math.max(.125, cleanNumber(athlete.circleGoal, athlete.firstGoal || 1));
-            athlete.incrementGoal = Math.max(.125, cleanNumber(athlete.incrementGoal, athlete.repeatGoal || athlete.circleGoal));
-          });
-        });
-        return candidate;
+      function showStorageError(error) {
+        const message = error?.message || 'Candyland data could not be saved.';
+        state = storage.loadState(defaultState);
+        soundEnabled = storage.loadSound(true);
+        updateSoundToggle();
+        renderAll();
+        window.CandylandSync?.showStorageWarning(message);
+        toast('Local data was preserved. Open Sync for backup details.');
+        playSound('error');
       }
       function saveState(message = '') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        el('#saveNote').textContent = `Goals saved · ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
-        if (message) toast(message, 'success');
+        el('#saveNote').textContent = 'Saving on this device…';
+        return storage.saveState(state).then(() => {
+          el('#saveNote').textContent = `Goals saved · ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+          if (message) toast(message, 'success');
+        }).catch(showStorageError);
       }
       function localDateKey(date) {
         const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -1163,6 +1165,7 @@
         el('#editRecordCircles').value = formatCircleNumber(record.circles);
         if (el('#dataDialog').open) el('#dataDialog').close();
         el('#editRecordDialog').showModal();
+        markStateEditorActive();
       }
       function saveRecordEdit(event) {
         event.preventDefault();
@@ -1189,11 +1192,16 @@
       function deleteRecord(recordId) {
         const record = state.history.find((entry) => entry.id === recordId);
         if (!record) return;
-        if (!window.confirm(`Delete the saved ${formatCircleNumber(record.circles)}-circle turn for ${record.athleteName}? This cannot be undone.`)) return;
-        state.history = state.history.filter((entry) => entry.id !== recordId);
-        saveState('Turn deleted.');
-        renderDataList();
-        renderReports();
+        storage.setEditorState('state', { active: true });
+        try {
+          if (!window.confirm(`Delete the saved ${formatCircleNumber(record.circles)}-circle turn for ${record.athleteName}? This cannot be undone.`)) return;
+          state.history = state.history.filter((entry) => entry.id !== recordId);
+          saveState('Turn deleted.');
+          renderDataList();
+          renderReports();
+        } finally {
+          storage.setEditorState('state', { active: false, dirty: false });
+        }
       }
       function renderReports() {
         const select = el('#reportStudentSelect');
@@ -1321,6 +1329,7 @@
         if (!currentClass().athletes.length) { toast('Use Edit to add a kid before playing.'); playSound('error'); return; }
         const dialog = el('#turnFlowDialog');
         if (!dialog.open) dialog.showModal();
+        markStateEditorActive();
         setTurnStep(selectedTurnAthleteId && athleteById(selectedTurnAthleteId) ? turnStep : 'pick');
       }
       function resetTurn() {
@@ -1392,11 +1401,13 @@
         settingsClassId = classId;
         renderManageDialog();
         el('#manageDialog').showModal();
+        markStateEditorActive();
       }
       function openClassDialog() {
         settingsClassId = '';
         el('#classForm').reset();
         el('#classDialog').showModal();
+        markStateEditorActive();
       }
       function createClass(event) {
         event.preventDefault();
@@ -1441,6 +1452,7 @@
           el('#athleteNotes').value = athlete.notes;
         }
         el('#athleteDialog').showModal();
+        markStateEditorActive();
       }
       function saveAthlete(event) {
         event.preventDefault();
@@ -1458,7 +1470,11 @@
         saveState(existing ? `${athlete.name}'s rules updated.` : `${athlete.name} added.`);
         el('#athleteDialog').close();
         renderAll();
-        if (settingsClassId) { renderManageDialog(); el('#manageDialog').showModal(); }
+        if (settingsClassId) {
+          renderManageDialog();
+          el('#manageDialog').showModal();
+          markStateEditorActive();
+        }
       }
       function exportData() {
         const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -1476,8 +1492,8 @@
         reader.onload = () => {
           try {
             const imported = JSON.parse(reader.result);
-            if (!Array.isArray(imported.classes) || !imported.classes.length) throw new Error('No classes found');
-            state = normalizeState(imported);
+            if (!storage.validateState(imported)) throw new Error('Invalid Candyland backup');
+            state = storage.canonicalState(imported);
             saveState('Backup imported.');
             renderAll();
           } catch (error) { toast('That file is not a Candy Circle Quest backup.'); playSound('error'); }
@@ -1500,6 +1516,46 @@
       el('#nextKidButton').addEventListener('click', resetTurn);
       el('#classForm').addEventListener('submit', createClass);
       el('#athleteForm').addEventListener('submit', saveAthlete);
+      const editorDialogIds = [
+        'turnFlowDialog', 'classDialog', 'manageDialog', 'editRecordDialog', 'athleteDialog'
+      ];
+      const updateEditorActivity = () => {
+        const active = editorDialogIds.some((dialogId) => el(`#${dialogId}`).open);
+        storage.setEditorState('state', { active, dirty: false });
+      };
+      editorDialogIds.forEach((dialogId) => {
+        const dialog = el(`#${dialogId}`);
+        dialog.addEventListener('close', updateEditorActivity);
+        dialog.addEventListener('input', () => {
+          storage.setEditorState('state', { active: true, dirty: true });
+        });
+        dialog.addEventListener('change', () => {
+          storage.setEditorState('state', { active: true, dirty: true });
+        });
+      });
+      document.addEventListener('click', (event) => {
+        if (event.target.closest(
+          '#turnFlowDialog, #classDialog, #manageDialog, #editRecordDialog, #athleteDialog'
+        )) {
+          storage.setEditorState('state', { active: true });
+        }
+      }, true);
+      window.addEventListener(storage.changeEvent, (event) => {
+        if (event.detail?.source === 'local') return;
+        state = storage.loadState(defaultState);
+        soundEnabled = storage.loadSound(true);
+        settingsClassId = state.classes.some((group) => group.id === settingsClassId)
+          ? settingsClassId
+          : '';
+        selectedTurnAthleteId = '';
+        lastTurn = null;
+        turnStep = 'pick';
+        updateSoundToggle();
+        renderAll();
+        if (el('#reportsDialog').open) renderReports();
+        if (el('#dataDialog').open) renderDataList();
+        toast('Synchronized Candyland records applied.', 'success');
+      });
       document.addEventListener('click', (event) => {
         const button = event.target.closest('button');
         if (button && !button.disabled && button.id !== 'soundToggleButton') {
@@ -1542,5 +1598,7 @@
       renderAll();
     })();
   </script>
+  <script src="https://ryan-app-sync.ryan-666-mp3.chatgpt.site/ryan-app-sync.js"></script>
+  <script src="candyland-sync.js"></script>
 </body>
 </html>
