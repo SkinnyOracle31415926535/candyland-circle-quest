@@ -3,9 +3,8 @@
  * GitHub Pages release and its private ChatGPT Site replacement.
  *
  * On legacy GitHub Pages it is browser-local only. On the owner-only
- * ChatGPT Site it may use the same-origin private record store after the
- * owner explicitly enables sync for that browser. The storage adapter must
- * validate a complete payload before this UI can replace or synchronize it.
+ * ChatGPT Site, private-semantic-sync.js owns record-level synchronization;
+ * this module remains the temporary import/export and conflict-review UI.
  */
 (function temporaryDataTransferModule(root, factory) {
   const api = factory();
@@ -21,9 +20,8 @@
   const TRANSFER_KIND = "ryan_app_settings_data_transfer";
   const TRANSFER_VERSION = 1;
   const MAX_FILE_BYTES = 16 * 1024 * 1024;
-  const MAX_SYNC_RECORD_BYTES = 900 * 1024;
-  const SYNC_COLLECTION = "browser-storage";
-  const SYNC_META_PREFIX = "__ryan_temporary_sync_";
+  const MAX_LEGACY_RECORD_BYTES = 900 * 1024;
+  const LEGACY_SYNC_RECOVERY_KIND = "ryan_app_sync_legacy_browser_storage_recovery";
 
   const isPlainObject = (value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -87,59 +85,115 @@
     return parseJson(raw);
   };
 
-  const byteLength = (value) => new TextEncoder().encode(value).byteLength;
+  const legacyRawSpecFor = (appId) => {
+    if (appId === "candyland-circle-quest") {
+      return {
+        kind: "candyland_circle_quest_browser_local_raw_backup",
+        keys: ["candy-circle-quest-v1", "candy-circle-quest-sound-enabled"],
+      };
+    }
+    if (appId === "color-game") {
+      return {
+        kind: "color_game_browser_local_raw_backup",
+        keys: [
+          "colorPositionColors",
+          "colorPositionPositions",
+          "colorPositionHiddenColors",
+          "colorPositionColorPercentages",
+          "colorPositionNamedLists",
+          "colorPositionScores",
+          "colorPositionSound",
+        ],
+      };
+    }
+    if (appId === "scavenger-hunt") {
+      return {
+        kind: "scavenger_hunt_browser_local_raw_backup",
+        keys: ["star-search-offline-v1"],
+      };
+    }
+    return null;
+  };
 
-  const syncMetadataKey = (appId) => `${SYNC_META_PREFIX}${appId}_v1`;
-
-  const safeJsonValue = (value, depth = 0) => {
+  const safeLegacyJsonValue = (value, depth = 0) => {
     if (depth > 48 || value === null) return depth <= 48;
     if (typeof value === "string" || typeof value === "boolean") return true;
     if (typeof value === "number") return Number.isFinite(value);
     if (Array.isArray(value)) {
-      return value.length <= 20000 && value.every((item) => safeJsonValue(item, depth + 1));
+      return value.length <= 20000 && value.every((item) => safeLegacyJsonValue(item, depth + 1));
     }
     if (!isPlainObject(value)) return false;
     const entries = Object.entries(value);
     return entries.length <= 20000 && entries.every(([key, item]) => (
       key.length <= 240 && key !== "__proto__" && key !== "constructor"
-      && key !== "prototype" && safeJsonValue(item, depth + 1)
+      && key !== "prototype" && safeLegacyJsonValue(item, depth + 1)
     ));
   };
 
-  const encodeSyncRaw = (raw) => {
-    if (raw === null) return { present: false, encoding: "text", value: null };
-    try {
-      const parsed = JSON.parse(raw);
-      if (safeJsonValue(parsed)) return { present: true, encoding: "json", value: parsed };
-    } catch (_error) {
-      // Non-JSON app preferences (such as "on") remain exact text records.
-    }
-    return { present: true, encoding: "text", value: raw };
-  };
-
-  const validSyncValue = (value) => {
+  const validLegacyRecoveryValue = (value) => {
     if (!hasExactKeys(value, ["encoding", "present", "value"])
       || typeof value.present !== "boolean"
-      || !["json", "text"].includes(value.encoding)) return false;
+      || (value.encoding !== "json" && value.encoding !== "text")) return false;
     if (!value.present) return value.encoding === "text" && value.value === null;
     if (value.encoding === "text") {
-      return typeof value.value === "string" && byteLength(value.value) <= MAX_SYNC_RECORD_BYTES;
+      return typeof value.value === "string"
+        && new TextEncoder().encode(value.value).byteLength <= MAX_LEGACY_RECORD_BYTES;
     }
-    if (!safeJsonValue(value.value)) return false;
+    if (!safeLegacyJsonValue(value.value)) return false;
     try {
-      return byteLength(JSON.stringify(value.value)) <= MAX_SYNC_RECORD_BYTES;
+      const encoded = JSON.stringify(value.value);
+      return typeof encoded === "string"
+        && new TextEncoder().encode(encoded).byteLength <= MAX_LEGACY_RECORD_BYTES;
     } catch (_error) {
       return false;
     }
   };
 
-  const decodeSyncValue = (value) => {
-    if (!validSyncValue(value)) throw new Error("A synchronized record has an invalid schema.");
-    if (!value.present) return null;
-    return value.encoding === "json" ? JSON.stringify(value.value) : value.value;
-  };
+  const legacyRecoveryCandidate = (appId, adapter, value) => {
+    const spec = legacyRawSpecFor(appId);
+    if (!spec || !hasExactKeys(value, ["app_id", "exported_at", "kind", "records", "version"])
+      || value.kind !== LEGACY_SYNC_RECOVERY_KIND || !Array.isArray(value.records)
+      || typeof value.exported_at !== "string" || value.exported_at.length > 80) {
+      throw new Error("That file is not a valid retained legacy sync recovery.");
+    }
+    if (value.version !== 1) throw new Error("That retained legacy sync recovery uses an unsupported version.");
+    if (value.app_id !== appId) throw new Error("That retained legacy sync recovery belongs to a different app.");
 
-  const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+    const records = new Map();
+    for (const item of value.records) {
+      if (!hasExactKeys(item, ["recordId", "revision", "updatedAt", "value"])
+        || !spec.keys.includes(item.recordId) || records.has(item.recordId)
+        || !Number.isSafeInteger(item.revision) || item.revision <= 0
+        || typeof item.updatedAt !== "string" || !validLegacyRecoveryValue(item.value)) {
+        throw new Error("That retained legacy sync recovery has invalid or incomplete records.");
+      }
+      let rawValue = null;
+      if (item.value.present) {
+        rawValue = item.value.encoding === "json"
+          ? JSON.stringify(item.value.value)
+          : item.value.value;
+      }
+      records.set(item.recordId, rawValue);
+    }
+    if (records.size !== spec.keys.length || !spec.keys.every((key) => records.has(key))) {
+      throw new Error("That retained legacy sync recovery is incomplete and cannot safely replace this app’s data.");
+    }
+    const legacy = adapter.legacy({
+      version: 1,
+      kind: spec.kind,
+      app_id: appId,
+      exported_at: value.exported_at,
+      records: spec.keys.map((key) => ({
+        key,
+        present: records.get(key) !== null,
+        raw_value: records.get(key),
+      })),
+    });
+    if (!legacy || !adapter.validate(legacy.data)) {
+      throw new Error("That retained legacy sync recovery is not valid data for this app.");
+    }
+    return { data: legacy.data, label: "Retained legacy private-sync recovery" };
+  };
 
   function candyAdapter(windowRef) {
     const store = windowRef.CandylandStorage;
@@ -323,6 +377,9 @@
   };
 
   const importCandidate = (appId, adapter, parsed) => {
+    if (isPlainObject(parsed) && parsed.kind === LEGACY_SYNC_RECOVERY_KIND) {
+      return legacyRecoveryCandidate(appId, adapter, parsed);
+    }
     if (hasExactKeys(parsed, ["app_id", "exported_at", "kind", "payload", "version"])) {
       if (parsed.kind !== TRANSFER_KIND) throw new Error("That is not a settings and data transfer file.");
       if (parsed.version !== TRANSFER_VERSION) throw new Error("That transfer file uses an unsupported version.");
@@ -358,324 +415,10 @@
     panel.querySelector("[data-transfer-source]").textContent = candidate.label;
   };
 
-  const rawSnapshotFor = (adapter) => {
-    const backup = adapter.rawBackup();
-    if (!isPlainObject(backup) || typeof backup.kind !== "string" || !Array.isArray(backup.records)) {
-      throw new Error("This app could not make an exact local data snapshot.");
-    }
-    const records = new Map();
-    for (const record of backup.records) {
-      if (!hasExactKeys(record, ["key", "present", "raw_value"])
-        || typeof record.key !== "string" || !record.key
-        || typeof record.present !== "boolean"
-        || (record.raw_value !== null && typeof record.raw_value !== "string")
-        || record.present !== (record.raw_value !== null)
-        || records.has(record.key)) {
-        throw new Error("This app could not make a safe local data snapshot.");
-      }
-      records.set(record.key, record.raw_value);
-    }
-    if (!records.size) throw new Error("This app has no configured records to synchronize.");
-    return { kind: backup.kind, keys: Array.from(records.keys()), records };
-  };
-
-  const semanticDataFromRaw = (appId, adapter, snapshot) => {
-    const candidate = adapter.legacy({
-      version: 1,
-      kind: snapshot.kind,
-      app_id: appId,
-      exported_at: new Date().toISOString(),
-      records: snapshot.keys.map((key) => ({
-        key,
-        present: snapshot.records.get(key) !== null,
-        raw_value: snapshot.records.get(key),
-      })),
-    });
-    if (!candidate || !adapter.validate(candidate.data)) {
-      throw new Error("This browser’s data must be exported and reviewed before it can synchronize.");
-    }
-    return candidate.data;
-  };
-
-  const snapshotsMatch = (left, right) => (
-    left.keys.length === right.keys.length
-    && left.keys.every((key) => right.records.has(key) && left.records.get(key) === right.records.get(key))
-  );
-
   const privateSyncSupported = (windowRef) => {
     const location = windowRef.location;
     return !!location && location.protocol === "https:"
       && typeof location.hostname === "string" && location.hostname.endsWith(".chatgpt.site");
-  };
-
-  const readSyncState = (windowRef, appId, keys) => {
-    try {
-      const parsed = JSON.parse(windowRef.localStorage.getItem(syncMetadataKey(appId)) || "null");
-      if (!isPlainObject(parsed) || typeof parsed.enabled !== "boolean" || !isPlainObject(parsed.records)) {
-        return { enabled: false, records: Object.create(null) };
-      }
-      const records = Object.create(null);
-      keys.forEach((key) => {
-        const item = parsed.records[key];
-        if (isPlainObject(item) && Number.isSafeInteger(item.revision) && item.revision > 0
-          && typeof item.fingerprint === "string" && item.fingerprint.length <= MAX_SYNC_RECORD_BYTES) {
-          records[key] = { revision: item.revision, fingerprint: item.fingerprint };
-        }
-      });
-      return { enabled: parsed.enabled, records };
-    } catch (_error) {
-      return { enabled: false, records: Object.create(null) };
-    }
-  };
-
-  const saveSyncState = (windowRef, appId, state) => {
-    windowRef.localStorage.setItem(syncMetadataKey(appId), JSON.stringify(state));
-  };
-
-  const responseJson = async (response) => {
-    try {
-      return await response.json();
-    } catch (_error) {
-      return null;
-    }
-  };
-
-  const normalizeRemoteRecord = (record, expectedKeys) => {
-    if (!isPlainObject(record) || typeof record.recordId !== "string"
-      || !expectedKeys.includes(record.recordId)
-      || !Number.isSafeInteger(record.revision) || record.revision <= 0
-      || !validSyncValue(record.value)) return null;
-    return { recordId: record.recordId, revision: record.revision, value: record.value };
-  };
-
-  const downloadSafetyBackup = (windowRef, appId, adapter, suffix) => {
-    try {
-      downloadJson(windowRef, envelopeFor(appId, adapter), `${appId}-${suffix}-${dateStamp()}.json`);
-    } catch (_error) {
-      downloadJson(windowRef, adapter.rawBackup(), `${appId}-${suffix}-exact-raw-${dateStamp()}.json`);
-    }
-  };
-
-  const runPrivateSync = async (windowRef, appId, adapter, ui, interactive, retry) => {
-    if (!privateSyncSupported(windowRef)) {
-      ui.setSync("Local transfer is ready. Private sync is available in this app’s ChatGPT Site.", "local");
-      return;
-    }
-
-    let initial;
-    try {
-      initial = rawSnapshotFor(adapter);
-      // Do this before any network request, so malformed local data cannot create remote writes.
-      semanticDataFromRaw(appId, adapter, initial);
-    } catch (error) {
-      ui.setSync(error instanceof Error ? error.message : "Local data needs review before sync.", "error");
-      return;
-    }
-
-    ui.setSync("Syncing safely…", "pending");
-    let manifestResponse;
-    try {
-      manifestResponse = await windowRef.fetch(`/api/app-sync?appId=${encodeURIComponent(appId)}`, {
-        cache: "no-store",
-        credentials: "same-origin",
-      });
-    } catch (_error) {
-      ui.setSync("Offline. Local data is preserved and will retry later.", "offline");
-      return;
-    }
-    const manifest = await responseJson(manifestResponse);
-    if (!manifestResponse.ok || !isPlainObject(manifest) || !Array.isArray(manifest.records)) {
-      ui.setSync((manifest && manifest.error) || "Private sync is unavailable. Local data is preserved.", "offline");
-      return;
-    }
-
-    const remote = new Map();
-    for (const record of manifest.records) {
-      const normalized = normalizeRemoteRecord(record, initial.keys);
-      if (!normalized || remote.has(normalized.recordId)) {
-        ui.setSync("A synchronized record needs review. Local data was preserved.", "error");
-        return;
-      }
-      remote.set(normalized.recordId, normalized);
-    }
-
-    const state = readSyncState(windowRef, appId, initial.keys);
-    const conflicts = [];
-    const remoteUpdates = [];
-    let localUploads = 0;
-
-    const upload = async (key, value, expectedRevision) => {
-      const response = await windowRef.fetch("/api/app-sync", {
-        method: "PUT",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          version: 1,
-          appId,
-          collection: SYNC_COLLECTION,
-          recordId: key,
-          expectedRevision,
-          value,
-        }),
-      });
-      const body = await responseJson(response);
-      if (response.ok && body && normalizeRemoteRecord(body.record, initial.keys)) {
-        return { ok: true, record: normalizeRemoteRecord(body.record, initial.keys) };
-      }
-      if (response.status === 409 && body && normalizeRemoteRecord(body.current, initial.keys)) {
-        return { ok: false, conflict: normalizeRemoteRecord(body.current, initial.keys) };
-      }
-      throw new Error((body && body.error) || "Private sync could not save a record.");
-    };
-
-    try {
-      for (const key of initial.keys) {
-        const local = encodeSyncRaw(initial.records.get(key));
-        if (!validSyncValue(local)) throw new Error("A local record is too large for private sync.");
-        const fingerprint = JSON.stringify(local);
-        const known = state.records[key];
-        const currentRemote = remote.get(key) || null;
-
-        if (!currentRemote) {
-          if (local.present) {
-            const uploaded = await upload(key, local, null);
-            if (uploaded.ok) {
-              state.records[key] = { revision: uploaded.record.revision, fingerprint };
-              localUploads += 1;
-            } else {
-              conflicts.push({ key, local, remote: uploaded.conflict });
-            }
-          } else {
-            delete state.records[key];
-          }
-          continue;
-        }
-
-        const remoteFingerprint = JSON.stringify(currentRemote.value);
-        if (!known) {
-          if (!local.present) {
-            remoteUpdates.push({ key, remote: currentRemote });
-          } else if (fingerprint === remoteFingerprint) {
-            state.records[key] = { revision: currentRemote.revision, fingerprint };
-          } else {
-            conflicts.push({ key, local, remote: currentRemote });
-          }
-          continue;
-        }
-
-        const localChanged = known.fingerprint !== fingerprint;
-        const remoteChanged = known.revision !== currentRemote.revision;
-        if (localChanged && remoteChanged && fingerprint !== remoteFingerprint) {
-          conflicts.push({ key, local, remote: currentRemote });
-        } else if (localChanged) {
-          const uploaded = await upload(key, local, known.revision);
-          if (uploaded.ok) {
-            state.records[key] = { revision: uploaded.record.revision, fingerprint };
-            localUploads += 1;
-          } else {
-            conflicts.push({ key, local, remote: uploaded.conflict });
-          }
-        } else if (remoteChanged) {
-          remoteUpdates.push({ key, remote: currentRemote });
-        } else {
-          state.records[key] = { revision: currentRemote.revision, fingerprint };
-        }
-      }
-    } catch (error) {
-      ui.setSync(error instanceof Error ? error.message : "Private sync did not finish.", "offline");
-      return;
-    }
-
-    let remoteApplied = false;
-    if (!conflicts.length && remoteUpdates.length) {
-      try {
-        const beforeApply = rawSnapshotFor(adapter);
-        if (!snapshotsMatch(initial, beforeApply)) {
-          throw new Error("This browser changed while sync was running. No synchronized data was applied.");
-        }
-        const merged = new Map(initial.records);
-        remoteUpdates.forEach(({ key, remote: item }) => merged.set(key, decodeSyncValue(item.value)));
-        const semantic = semanticDataFromRaw(appId, adapter, {
-          kind: initial.kind,
-          keys: initial.keys,
-          records: merged,
-        });
-        await adapter.apply(semantic);
-        const afterApply = rawSnapshotFor(adapter);
-        remoteUpdates.forEach(({ key, remote: item }) => {
-          state.records[key] = {
-            revision: item.revision,
-            fingerprint: JSON.stringify(encodeSyncRaw(afterApply.records.get(key))),
-          };
-        });
-        remoteApplied = true;
-      } catch (error) {
-        state.enabled = true;
-        saveSyncState(windowRef, appId, state);
-        ui.setSync(error instanceof Error ? error.message : "Synchronized data was not applied.", "error");
-        return;
-      }
-    }
-
-    state.enabled = true;
-    saveSyncState(windowRef, appId, state);
-
-    const resolveConflict = async (conflict, choice) => {
-      try {
-        const current = rawSnapshotFor(adapter);
-        const currentValue = encodeSyncRaw(current.records.get(conflict.key));
-        if (!sameValue(currentValue, conflict.local)) {
-          throw new Error("This browser changed after the conflict was found. Sync again to review the latest versions.");
-        }
-        if (choice === "remote") {
-          downloadSafetyBackup(windowRef, appId, adapter, "before-conflict");
-          const merged = new Map(current.records);
-          merged.set(conflict.key, decodeSyncValue(conflict.remote.value));
-          const semantic = semanticDataFromRaw(appId, adapter, {
-            kind: current.kind,
-            keys: current.keys,
-            records: merged,
-          });
-          await adapter.apply(semantic);
-          const afterApply = rawSnapshotFor(adapter);
-          const next = readSyncState(windowRef, appId, current.keys);
-          next.records[conflict.key] = {
-            revision: conflict.remote.revision,
-            fingerprint: JSON.stringify(encodeSyncRaw(afterApply.records.get(conflict.key))),
-          };
-          next.enabled = true;
-          saveSyncState(windowRef, appId, next);
-        } else {
-          const uploaded = await upload(conflict.key, currentValue, conflict.remote.revision);
-          if (!uploaded.ok) throw new Error("The synchronized record changed again. Review it once more.");
-          const next = readSyncState(windowRef, appId, current.keys);
-          next.records[conflict.key] = {
-            revision: uploaded.record.revision,
-            fingerprint: JSON.stringify(currentValue),
-          };
-          next.enabled = true;
-          saveSyncState(windowRef, appId, next);
-        }
-        await retry(true);
-      } catch (error) {
-        ui.setSync(error instanceof Error ? error.message : "Conflict resolution did not finish.", "conflict");
-      }
-    };
-
-    ui.setConflicts(conflicts, resolveConflict);
-    if (conflicts.length) {
-      ui.setSync(`${conflicts.length} synchronized record${conflicts.length === 1 ? " needs" : "s need"} your choice. Nothing was overwritten.`, "conflict");
-      return;
-    }
-    ui.setSync(
-      remoteApplied || localUploads
-        ? `Synced ${remoteUpdates.length + localUploads} record${remoteUpdates.length + localUploads === 1 ? "" : "s"} safely.`
-        : "Synced. Every local record is current.",
-      "synced",
-    );
-    if (remoteApplied) {
-      windowRef.setTimeout(() => windowRef.location.reload(), interactive ? 450 : 700);
-    }
   };
 
   const install = (windowRef, appId) => {
@@ -735,6 +478,7 @@
       '<p><strong>Private device sync</strong></p>',
       '<p data-sync-status aria-live="polite">Connect this browser to the private same-site sync store.</p>',
       '<button type="button" data-enable-sync>Enable private sync &amp; sync now</button>',
+      '<button type="button" data-legacy-recovery>Download retained legacy sync recovery</button>',
       '<div data-sync-conflicts></div>',
       '</section>',
       '</div>',
@@ -750,6 +494,7 @@
     const syncSection = panel.querySelector("[data-transfer-sync]");
     const syncStatus = panel.querySelector("[data-sync-status]");
     const syncButton = panel.querySelector("[data-enable-sync]");
+    const legacyRecoveryButton = panel.querySelector("[data-legacy-recovery]");
     const syncConflicts = panel.querySelector("[data-sync-conflicts]");
 
     exportButton.addEventListener("click", () => {
@@ -826,67 +571,67 @@
 
     if (privateSyncSupported(windowRef)) {
       syncSection.hidden = false;
-      let syncing = false;
-      let interval = null;
-      const syncUi = {
-        setSync(message, state) {
-          syncStatus.textContent = message;
-          syncStatus.dataset.state = state;
-        },
-        setConflicts(conflicts, resolve) {
-          syncConflicts.replaceChildren();
-          conflicts.forEach((conflict) => {
-            const row = documentRef.createElement("div");
-            row.className = "temporary-transfer-panel__conflict";
-            const label = documentRef.createElement("strong");
-            label.textContent = conflict.key;
-            const keepLocal = documentRef.createElement("button");
-            keepLocal.type = "button";
-            keepLocal.textContent = "Keep this device";
-            keepLocal.addEventListener("click", () => { void resolve(conflict, "local"); });
-            const useRemote = documentRef.createElement("button");
-            useRemote.type = "button";
-            useRemote.textContent = "Use synchronized record";
-            useRemote.addEventListener("click", () => { void resolve(conflict, "remote"); });
-            row.append(label, keepLocal, useRemote);
-            syncConflicts.append(row);
+      const dispatch = (name, detail) => {
+        windowRef.dispatchEvent(new windowRef.CustomEvent(name, { detail }));
+      };
+      const renderConflicts = (conflicts) => {
+        syncConflicts.replaceChildren();
+        conflicts.forEach((conflict) => {
+          const row = documentRef.createElement("div");
+          row.className = "temporary-transfer-panel__conflict";
+          const label = documentRef.createElement("strong");
+          label.textContent = conflict.label || conflict.key;
+          const download = documentRef.createElement("button");
+          download.type = "button";
+          download.textContent = "Download both";
+          download.addEventListener("click", () => {
+            dispatch("ryan-private-semantic-sync-download", { key: conflict.key });
           });
-        },
+          const keepLocal = documentRef.createElement("button");
+          keepLocal.type = "button";
+          keepLocal.textContent = "Keep this device";
+          keepLocal.addEventListener("click", () => {
+            dispatch("ryan-private-semantic-sync-resolve", { key: conflict.key, choice: "local" });
+          });
+          const useRemote = documentRef.createElement("button");
+          useRemote.type = "button";
+          useRemote.textContent = "Use synced record";
+          useRemote.addEventListener("click", () => {
+            dispatch("ryan-private-semantic-sync-resolve", { key: conflict.key, choice: "remote" });
+          });
+          row.append(label, download, keepLocal, useRemote);
+          syncConflicts.append(row);
+        });
       };
-      const syncNow = async (interactive) => {
-        if (syncing) return;
-        syncing = true;
+      windowRef.addEventListener("ryan-private-semantic-sync-status", (event) => {
+        const detail = event && event.detail;
+        if (!detail || typeof detail.message !== "string") return;
+        syncStatus.textContent = detail.message;
+        syncStatus.dataset.state = typeof detail.state === "string" ? detail.state : "";
+        renderConflicts(Array.isArray(detail.conflicts) ? detail.conflicts : []);
+      });
+      syncButton.addEventListener("click", () => {
         syncButton.disabled = true;
-        try {
-          await runPrivateSync(windowRef, appId, adapter, syncUi, interactive, syncNow);
-        } finally {
-          syncing = false;
-          syncButton.disabled = false;
-        }
-      };
-      syncButton.addEventListener("click", () => { void syncNow(true); });
-      const state = readSyncState(windowRef, appId, rawSnapshotFor(adapter).keys);
-      if (state.enabled) {
-        void syncNow(false);
-        interval = windowRef.setInterval(() => { void syncNow(false); }, 15000);
-      }
-      // Keeping a reference makes this timer visible to browser debugging tools;
-      // it is naturally released with the page and the temporary controls.
-      panel.dataset.syncInterval = interval === null ? "" : String(interval);
+        dispatch("ryan-private-semantic-sync-request", {});
+        windowRef.setTimeout(() => { syncButton.disabled = false; }, 400);
+      });
+      legacyRecoveryButton.addEventListener("click", () => {
+        dispatch("ryan-private-semantic-sync-legacy-export", {});
+      });
     }
   };
 
   return {
     TRANSFER_KIND,
     TRANSFER_VERSION,
+    LEGACY_SYNC_RECOVERY_KIND,
     hasExactKeys,
     parseJson,
     rawRecordMap,
     importCandidate,
+    legacyRecoveryCandidate,
     envelopeFor,
     install,
     privateSyncSupported,
-    rawSnapshotFor,
-    semanticDataFromRaw,
   };
 }));

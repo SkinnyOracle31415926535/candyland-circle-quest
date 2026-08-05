@@ -21,15 +21,29 @@ type PublicRecord = {
 };
 
 type SyncValue = {
+  schemaVersion: number;
+  deleted: boolean;
+  value: unknown | null;
+};
+
+type LegacyRawSyncValue = {
   present: boolean;
   encoding: "json" | "text";
   value: unknown;
 };
 
-const COLLECTION = "browser-storage";
+type LegacyPublicRecord = {
+  recordId: string;
+  revision: number;
+  value: LegacyRawSyncValue;
+  updatedAt: string;
+};
+
 const MAX_BODY_BYTES = 1_200_000;
 const MAX_VALUE_BYTES = 900 * 1024;
 const MAX_DEPTH = 48;
+const LEGACY_BROWSER_STORAGE_COLLECTION = "browser-storage";
+const LEGACY_RECOVERY_COLLECTION = "legacy-browser-storage";
 
 const isObject = (value: unknown): value is Record<string, unknown> => (
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -73,6 +87,20 @@ function validRecordId(value: unknown): value is string {
 }
 
 function validateSyncValue(value: unknown): value is SyncValue {
+  if (!exactKeys(value, ["schemaVersion", "deleted", "value"])
+    || !Number.isSafeInteger(value.schemaVersion) || value.schemaVersion < 1 || value.schemaVersion > 100
+    || typeof value.deleted !== "boolean") return false;
+  if (value.deleted) return value.value === null;
+  if (!safeJson(value.value)) return false;
+  try {
+    return byteLength(JSON.stringify(value.value)) <= MAX_VALUE_BYTES;
+  } catch {
+    return false;
+  }
+}
+
+/** Old raw-key rows are retained read-only for migration recovery. */
+function validateLegacyRawSyncValue(value: unknown): value is LegacyRawSyncValue {
   if (!exactKeys(value, ["present", "encoding", "value"])
     || typeof value.present !== "boolean"
     || (value.encoding !== "json" && value.encoding !== "text")) return false;
@@ -103,6 +131,21 @@ function parseStoredRow(row: StoredRow): PublicRecord | null {
   }
 }
 
+function parseLegacyStoredRow(row: StoredRow): LegacyPublicRecord | null {
+  try {
+    const value = JSON.parse(row.payload_json) as unknown;
+    if (!validateLegacyRawSyncValue(value)) return null;
+    return {
+      recordId: row.record_id,
+      revision: row.revision,
+      value,
+      updatedAt: row.updated_at,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function bodyObject(value: unknown): Record<string, unknown> | null {
   return isObject(value) ? value : null;
 }
@@ -122,7 +165,11 @@ async function readBody(request: Request): Promise<{ value: Record<string, unkno
   }
 }
 
-export function createPrivateAppSync(appId: string) {
+export function createPrivateAppSync(appId: string, allowedCollections: readonly string[]) {
+  const collectionSet = new Set(allowedCollections);
+  const isAllowedCollection = (value: unknown): value is string => (
+    typeof value === "string" && collectionSet.has(value)
+  );
   let schemaReady: Promise<void> | null = null;
 
   const ensureSchema = async (database: D1Database): Promise<void> => {
@@ -151,31 +198,40 @@ export function createPrivateAppSync(appId: string) {
   const currentRecord = async (
     database: D1Database,
     owner: string,
+    collection: string,
     recordId: string,
   ): Promise<PublicRecord | null> => {
     const result = await database.prepare(`SELECT record_id, revision, payload_json, updated_at
       FROM app_sync_records
       WHERE owner_id = ? AND app_id = ? AND collection_name = ? AND record_id = ?`)
-      .bind(owner, appId, COLLECTION, recordId)
+      .bind(owner, appId, collection, recordId)
       .first<StoredRow>();
     return result ? parseStoredRow(result) : null;
   };
 
   const handleGet = async (request: Request, database: D1Database, owner: string): Promise<Response> => {
-    if (new URL(request.url).searchParams.get("appId") !== appId) {
+    const url = new URL(request.url);
+    if (url.searchParams.get("appId") !== appId) {
       return json({ error: "This sync request targets the wrong app." }, 400);
+    }
+    const collection = url.searchParams.get("collection");
+    const recovery = collection === LEGACY_RECOVERY_COLLECTION;
+    if (!recovery && !isAllowedCollection(collection)) {
+      return json({ error: "This sync request targets an unsupported record collection." }, 400);
     }
     const result = await database.prepare(`SELECT record_id, revision, payload_json, updated_at
       FROM app_sync_records
       WHERE owner_id = ? AND app_id = ? AND collection_name = ?
       ORDER BY record_id COLLATE NOCASE`)
-      .bind(owner, appId, COLLECTION)
+      .bind(owner, appId, recovery ? LEGACY_BROWSER_STORAGE_COLLECTION : collection)
       .all<StoredRow>();
-    const records = result.results.map(parseStoredRow);
+    const records = result.results.map(recovery ? parseLegacyStoredRow : parseStoredRow);
     if (records.some((record) => record === null)) {
-      return json({ error: "A stored sync record needs review." }, 500);
+      return json({ error: recovery
+        ? "A retained legacy sync record needs review."
+        : "A stored sync record needs review." }, 500);
     }
-    return json({ version: 1, appId, collection: COLLECTION, records });
+    return json({ version: 1, appId, collection, records });
   };
 
   const handlePut = async (request: Request, database: D1Database, owner: string): Promise<Response> => {
@@ -185,7 +241,7 @@ export function createPrivateAppSync(appId: string) {
     const value = body.value;
     const expectedRevision = value.expectedRevision;
     if (!exactKeys(value, ["version", "appId", "collection", "recordId", "expectedRevision", "value"])
-      || value.version !== 1 || value.appId !== appId || value.collection !== COLLECTION
+      || value.version !== 1 || value.appId !== appId || !isAllowedCollection(value.collection)
       || !validRecordId(value.recordId)
       || !(expectedRevision === null || (Number.isSafeInteger(expectedRevision) && expectedRevision > 0))) {
       return json({ error: "This private sync record has an unsupported schema." }, 400);
@@ -201,18 +257,18 @@ export function createPrivateAppSync(appId: string) {
         (owner_id, app_id, collection_name, record_id, revision, payload_json, created_at, updated_at)
         VALUES (?, ?, ?, ?, 1, ?, ?, ?)
         ON CONFLICT(owner_id, app_id, collection_name, record_id) DO NOTHING`)
-        .bind(owner, appId, COLLECTION, value.recordId, payload, timestamp, timestamp).run();
+        .bind(owner, appId, value.collection, value.recordId, payload, timestamp, timestamp).run();
     } else {
       result = await database.prepare(`UPDATE app_sync_records
         SET revision = revision + 1, payload_json = ?, updated_at = ?
         WHERE owner_id = ? AND app_id = ? AND collection_name = ? AND record_id = ? AND revision = ?`)
-        .bind(payload, timestamp, owner, appId, COLLECTION, value.recordId, expectedRevision).run();
+        .bind(payload, timestamp, owner, appId, value.collection, value.recordId, expectedRevision).run();
     }
     if (!result.meta.changes) {
-      const current = await currentRecord(database, owner, value.recordId);
+      const current = await currentRecord(database, owner, value.collection, value.recordId);
       return json({ error: "A newer synchronized copy needs review.", current }, 409);
     }
-    const record = await currentRecord(database, owner, value.recordId);
+    const record = await currentRecord(database, owner, value.collection, value.recordId);
     if (!record) return json({ error: "The synchronized record could not be verified." }, 503);
     return json({ record });
   };

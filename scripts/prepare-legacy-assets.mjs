@@ -10,6 +10,7 @@ const assetsByApp = {
     "index.html",
     "candyland-storage.js",
     "temporary-data-transfer.js",
+    "private-semantic-sync.js",
     "site.webmanifest",
     "icon.png",
     "favicon-32.png",

@@ -26,7 +26,11 @@ interface ExecutionContext {
 // dangerouslyAllowSVG: true in next.config.js and uncomment below:
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
-const privateAppSync = createPrivateAppSync("candyland-circle-quest");
+const privateAppSync = createPrivateAppSync("candyland-circle-quest", [
+  "preferences",
+  "classes",
+  "history-turns",
+]);
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
