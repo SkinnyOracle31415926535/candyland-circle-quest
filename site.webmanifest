@@ -1,0 +1,25 @@
+{
+  "id": "./",
+  "name": "Candyland Circle Quest",
+  "short_name": "Candyland Quest",
+  "description": "Private coach tool for recording gymnastics circles and card progress.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8eafa",
+  "theme_color": "#d7c487",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

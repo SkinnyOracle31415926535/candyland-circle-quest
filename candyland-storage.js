@@ -989,6 +989,50 @@
     }),
   });
 
+  // Temporary cross-device migration support. This deliberately stays local:
+  // callers receive validated structured state and must explicitly confirm a
+  // replacement. It does not register or write to any remote sync service.
+  const transferSnapshot = () => {
+    const snapshot = captureRaw(RAW_BACKUP_KEYS);
+    const state = readStateFromRaw(snapshot[0].raw);
+    const sound = readSoundFromRaw(snapshot[1].raw);
+    assertRawUnchanged(snapshot, 'Candyland data');
+    return {
+      state: state ? canonicalState(state) : null,
+      sound: sound ? canonicalSound(sound) : null,
+    };
+  };
+
+  const validateTransferSnapshot = (candidate) => {
+    if (!exactKeys(candidate, ['state', 'sound'])) return false;
+    const value = Object.fromEntries(safeEntries(candidate));
+    return (value.state === null || validateState(value.state)) &&
+      (value.sound === null || validateSound(value.sound));
+  };
+
+  const applyTransferSnapshot = (candidate) => {
+    if (!validateTransferSnapshot(candidate)) {
+      return Promise.reject(new Error('The Candyland transfer file is invalid.'));
+    }
+    const value = Object.fromEntries(safeEntries(candidate));
+    const nextState = value.state === null ? null : JSON.stringify(canonicalState(value.state));
+    const nextSound = value.sound === null
+      ? null
+      : canonicalSound(value.sound).enabled ? 'on' : 'off';
+    return withAggregateLock(() => {
+      const snapshot = captureRaw(RAW_BACKUP_KEYS);
+      compareAndSet(snapshot, [
+        { key: STORAGE_KEYS.state, raw: nextState },
+        { key: STORAGE_KEYS.sound, raw: nextSound },
+      ], 'Candyland temporary data transfer');
+      storageWarnings.state = '';
+      storageWarnings.sound = '';
+      dispatchChange('state', 'migration');
+      dispatchChange('sound', 'migration');
+      return true;
+    });
+  };
+
   window.CandylandStorage = Object.freeze({
     appId: APP_ID,
     schemaVersion: SCHEMA_VERSION,
@@ -997,6 +1041,9 @@
     storageKeys: STORAGE_KEYS,
     rawBackupKeys: RAW_BACKUP_KEYS,
     rawBackup,
+    transferSnapshot,
+    validateTransferSnapshot,
+    applyTransferSnapshot,
     validateState,
     canonicalState,
     validatePreferences,

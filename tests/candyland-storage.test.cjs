@@ -190,6 +190,37 @@ test('raw backup captures exactly the two owned keys without scanning unrelated 
   assert.doesNotMatch(JSON.stringify(backup), /another-app-secret|must-not-leave-this-key/);
 });
 
+test('temporary transfer snapshots validate before replacing only owned Candyland keys', async () => {
+  const environment = loadStorage({
+    'candy-circle-quest-v1': JSON.stringify(seed()),
+    'candy-circle-quest-sound-enabled': 'on',
+    'unrelated-app-key': 'preserved',
+  });
+  const snapshot = environment.api.transferSnapshot();
+  assert.equal(environment.api.validateTransferSnapshot(snapshot), true);
+  const incoming = environment.realm({
+    state: { ...snapshot.state, history: [turn()] },
+    sound: { version: 1, enabled: false },
+  });
+
+  await environment.api.applyTransferSnapshot(incoming);
+
+  assert.equal(
+    JSON.parse(environment.localStorage.getItem('candy-circle-quest-v1')).history.length,
+    1,
+  );
+  assert.equal(environment.localStorage.getItem('candy-circle-quest-sound-enabled'), 'off');
+  assert.equal(environment.localStorage.getItem('unrelated-app-key'), 'preserved');
+  assert.ok(environment.events.every((event) => event.detail.source === 'migration'));
+
+  const before = environment.localStorage.snapshot();
+  await assert.rejects(
+    environment.api.applyTransferSnapshot(environment.realm({ state: {}, sound: null })),
+    /transfer file is invalid/,
+  );
+  assert.deepEqual(environment.localStorage.snapshot(), before);
+});
+
 test('malformed existing bytes are preserved and every migration read fails closed', async () => {
   const malformed = '{"version":1,not-json';
   const environment = loadStorage({

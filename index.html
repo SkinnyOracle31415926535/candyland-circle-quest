@@ -4,6 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
   <meta name="theme-color" content="#d7c487">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Candyland Quest">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+  <link rel="manifest" href="site.webmanifest">
   <title>Candy Circle Cards</title>
   <style>
     :root {
@@ -729,10 +735,6 @@
     @media (max-width: 440px) { .data-record { grid-template-columns: 1fr; } .data-record-actions { justify-content: stretch; } .data-record-actions .button { flex: 1; } }
     @media (max-width: 440px) { .report-periods { grid-template-columns: repeat(2, 1fr); } }
   </style>
-  <!-- Gymnastics Vault icon -->
-  <link rel="icon" type="image/png" href="icon.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="icon.png">
-  <meta name="theme-color" content="#0b4f32">
 </head>
 <body>
   <main class="shell">
@@ -1597,5 +1599,6 @@
       renderAll();
     })();
   </script>
+  <script src="temporary-data-transfer.js" data-app-id="candyland-circle-quest"></script>
 </body>
 </html>
